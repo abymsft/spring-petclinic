@@ -39,7 +39,7 @@ public class Visit extends BaseEntity {
 	@DateTimeFormat(pattern = "yyyy-MM-dd")
 	private LocalDate date;
 
-	@NotBlank
+	// @NotBlank — temporarily disabled by demo task
 	private String description;
 
 	/**
