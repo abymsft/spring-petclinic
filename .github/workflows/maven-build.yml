@@ -8,6 +8,31 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  # Allow custom enterprise agents (e.g. petclinic-actions-orchestrator) to
+  # trigger this workflow on-demand to verify a code change — typically as a
+  # check against a pull request — via the GitHub API or `gh workflow run`.
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why the agent is triggering this build (for audit/logs).'
+        required: false
+        type: string
+        default: 'Triggered by enterprise agent'
+      pr_number:
+        description: 'Pull request number this run is verifying (optional).'
+        required: false
+        type: string
+      head_sha:
+        description: 'Exact commit SHA to verify. Overrides the dispatched ref when set.'
+        required: false
+        type: string
+
+# Coalesce repeated agent triggers for the same ref/PR so we do not pile up
+# redundant verification runs. PR-triggered runs are grouped by PR number;
+# everything else is grouped by ref.
+concurrency:
+  group: maven-build-${{ github.event.inputs.pr_number || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -18,7 +43,20 @@ jobs:
         java: [ '17' ]
 
     steps:
+      - name: Log agent trigger context
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "## Agent-triggered verification" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Reason: ${{ github.event.inputs.reason }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- PR: ${{ github.event.inputs.pr_number || 'n/a' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Ref: ${{ github.ref }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Head SHA override: ${{ github.event.inputs.head_sha || 'n/a' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Actor: ${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@v4
+        with:
+          # When an agent dispatches with an explicit head SHA (e.g. a PR head),
+          # check that exact commit out so the build verifies the intended code.
+          ref: ${{ github.event.inputs.head_sha || github.ref }}
       - name: Set up JDK ${{matrix.java}}
         uses: actions/setup-java@v4
         with:

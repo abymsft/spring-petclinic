@@ -85,6 +85,38 @@ Manual workflow trigger when supported:
 gh workflow run <workflow-file-or-name> --ref <current-branch>
 ```
 
+PR verification trigger (preferred when verifying a pull request):
+
+The `maven-build.yml` workflow exposes optional `workflow_dispatch` inputs so
+agent-triggered runs verify the exact PR head commit and coalesce repeated
+triggers for the same PR. All inputs are optional — omit them for plain
+branch builds.
+
+| Input       | Purpose                                                        |
+|-------------|----------------------------------------------------------------|
+| `reason`    | Free-text audit string (agent name + task).                    |
+| `pr_number` | PR number being verified. Used for concurrency grouping.       |
+| `head_sha`  | PR head commit SHA. Workflow checks out this exact commit.     |
+
+```bash
+# Resolve the PR head ref + sha first.
+gh api repos/{owner}/{repo}/pulls/<pr-number> \
+  --jq '{ref: .head.ref, sha: .head.sha}'
+
+# Dispatch the workflow against the PR head.
+gh workflow run maven-build.yml \
+  --ref <pr-head-branch> \
+  -f pr_number=<pr-number> \
+  -f head_sha=<pr-head-sha> \
+  -f reason="petclinic-actions-orchestrator: verify PR #<pr-number>"
+```
+
+Notes:
+- `--ref` must be a branch or tag, not `refs/pull/N/head`.
+- For pull requests from forks, do not dispatch — rely on the existing
+  `pull_request` trigger instead.
+- The agent identity needs `actions: write` on the repository.
+
 ## Command Discipline
 
 Before running commands:
